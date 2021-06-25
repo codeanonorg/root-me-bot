@@ -1,4 +1,8 @@
-data.json
+.venv
+data.jsotry:
+    import simplejson as json
+except ImportError:
+    import jsonn
 **/__pycache__/*.pyc
 
 .vscode/*
