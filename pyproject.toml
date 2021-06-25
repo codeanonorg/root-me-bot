@@ -10,6 +10,7 @@ discord = "^1.7.3"
 "discord.py-stubs" = "^1.7.3"
 python = "^3.9"
 requests = "^2.25.1"
+pydantic = "^1.8.2"
 
 [tool.poetry.dev-dependencies]
 pre-commit = "^2.13.0"

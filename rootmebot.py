@@ -1,8 +1,9 @@
-from json.decoder import JSONDecodeError
+from database import Database
+from model import ChallengeInfo, User
 from pathlib import Path
 import os
 from asyncio.tasks import sleep
-from typing import Any, Dict
+from typing import Union
 import requests
 import json
 from discord.ext import commands
@@ -13,74 +14,67 @@ from embeds import *
 ROOT_DIR = Path(__file__).parent
 
 bot = commands.Bot(command_prefix='!')
-#bot.remove_command("help")
 base_url = os.environ.get("ROOTME_API_URL", "https://api.www.root-me.org/")
 api_key = os.environ["ROOTME_API_KEY"]
-#api_key = ""
 filename = Path(os.environ.get("BOT_DATABASE_PATH", ROOT_DIR / "data.json"))
-rootmechannel = os.environ["BOT_CHANNEL_ID"]  #root-me-news
+rootmechannel = int(os.environ["BOT_CHANNEL_ID"])
 bot_token = os.environ["BOT_TOKEN"]
+update_db_rate = int(os.environ.get("ROOTME_UPDATE_DB_RATE", 60))
+
+database = Database(filename, autocommit=True)
 
 
-def getUserInfo(userID):
+def get_user_info(userID: str) -> Union[User, None]:
     """get user info from the root-me API using the user ID"""
     data = requests.get(base_url + "auteurs/" + userID,
                         cookies={"api_key": api_key})
     print(data.status_code)
     if data.status_code == 200:
-        return data.json()
+        return User(**data.json())  # type: ignore
     else:
         print("error getting user info")
-        return 0
+        return None
 
 
-@loop(seconds=30)
-async def updateDB():
+@loop(seconds=update_db_rate)
+async def update_db():
     await bot.wait_until_ready()
     """update the local data from the API and check for solves"""
-    print("updating")
-    try:
-        users: Dict[str, Any] = json.load(filename.open("r"))
-    except (FileNotFoundError, JSONDecodeError):
-        filename.write_text("{}")
-        users = dict()
 
-    for user in users.values():
-        new_user_data = getUserInfo(user["id_auteur"])
-        for challenge in new_user_data["validations"]:
-            if challenge not in user["validations"]:
-                challenge_info = requests.get(
-                    base_url + f"challenges/{challenge['id_challenge']}",
-                    cookies={
-                        "api_key": api_key
-                    }).json()
-                print(challenge_info)
-                channel = bot.get_channel(rootmechannel)
-                await channel.send(
-                    embed=makeChallengeEmbed(challenge_info, new_user_data))
-        users[user["id_auteur"]] = new_user_data
-        await sleep(0.05)
-    file = open(filename, "w")
-    json.dump(users, file, indent=4)
-    file.close()
+    with database.transaction():
+        for user in database.iter_users():
+            new_user_data = get_user_info(user.id_auteur)
+            if not new_user_data:
+                continue
+            for challenge in new_user_data.validations:
+                if challenge not in user.validations:
+                    challenge_info = ChallengeInfo(**requests.get(
+                        base_url + f"challenges/{challenge.id_challenge}",
+                        cookies={
+                            "api_key": api_key
+                        }).json())  # type: ignore
+                    print(challenge_info)
+                    channel = bot.get_channel(rootmechannel)
+                    if channel is None:
+                        raise ValueError(
+                            f"Channel ID {rootmechannel!r} does not exist")
+                    await channel.send(
+                        embed=makeChallengeEmbed(challenge_info, new_user_data)
+                    )
+            database.set_user(user)
+            await sleep(0.05)
 
 
 @bot.command()
-async def add_user(context, arg1):
+async def add_user(context, user_id: str):
     """<user ID>"""
+    print(context)
     try:
-        if int(arg1) > 0:
-            file = open(filename, "r")
-            new_json = json.load(file)
-            new_info = getUserInfo(arg1)
-            file.close()
-            if new_info != 0:
-                new_json[new_info["id_auteur"]] = new_info
-                file = open(filename, "w")
-                json.dump(new_json, file, indent=4)
-                file.close()
+        if int(user_id) > 0:
+            if (new_info := get_user_info(user_id)):
+                database.set_user(new_info)
                 await context.channel.send(
-                    f"successfuly added user {new_info['nom']}")
+                    f"successfuly added user {new_info.nom}")
             else:
                 await context.channel.send(f"error getting this user's info")
         else:
@@ -90,9 +84,9 @@ async def add_user(context, arg1):
 
 
 @bot.command()
-async def find_user(context, arg1):
+async def find_user(context, username: str):
     """<user name>"""
-    username = parse.quote(arg1, safe="")
+    username = parse.quote(username, safe="")
     raw_data = requests.get(f"{base_url}auteurs?nom={username}",
                             cookies={"api_key": api_key})
     if (raw_data.status_code == 404):
@@ -130,13 +124,7 @@ async def remove_user(context, arg1):
 
 @bot.command()
 async def scoreboard(context):
-    users = []
-    file = open(filename, "r")
-    data = json.load(file)
-    file.close()
-
-    for user in data.values():
-        users.append((user['nom'], user['score']))
+    users = [(u.nom, u.score) for u in database.iter_users()]
     users.sort(key=lambda x: x[0])
     embed = makeScoreBoardEmbed(users)
     await context.channel.send(embed=embed)
@@ -151,12 +139,9 @@ async def scoreboard(context):
 
 @bot.command()
 async def reset_database(context):
-    empty = {}
-    file = open(filename, "w")
-    json.dump(empty, file)
-    file.close()
+    database.reset()
     await context.channel.send("database has been reset")
 
 
-updateDB.start()
+update_db.start()
 bot.run(bot_token)
