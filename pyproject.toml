@@ -8,6 +8,8 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = "^3.9"
 discord = "^1.7.3"
+requests = "^2.25.1"
+"discord.py-stubs" = "^1.7.3"
 
 [tool.poetry.dev-dependencies]
 yapf = "^0.31.0"
