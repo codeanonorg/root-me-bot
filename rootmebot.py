@@ -14,11 +14,10 @@ from embeds import *
 bot = commands.Bot(command_prefix = '!')
 #bot.remove_command("help")
 base_url = "https://api.www.root-me.org/"
-api_key = input("enter api key:")
-#api_key = ""
+api_key = ""
 filename = "data.json"
 rootmechannel = 782199856181149706 #root-me-news
-bot_token = ""
+token = ""
 
 def getUserInfo(userID):
     """get user info from the root-me API using the user ID"""
@@ -138,4 +137,4 @@ async def reset_database(context):
     await context.channel.send("database has been reset")
 
 updateDB.start()
-bot.run("NjQyMDUwNjA4MjQ0NzE5NjQ2.XcRSOQ.5BwvmAHHB3VYS4LEPW6V4QzjgjY")
+bot.run(token)
