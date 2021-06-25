@@ -9,3 +9,4 @@ repos:
     rev: "v0.31.0" # Use the sha / tag you want to point at
     hooks:
       - id: yapf
+        additional_dependencies: [toml]
