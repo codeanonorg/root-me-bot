@@ -11,3 +11,6 @@ data.json
 
 # Local History for Visual Studio Code
 .history/
+
+# Environment file
+.env

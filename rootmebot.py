@@ -1,4 +1,8 @@
+from json.decoder import JSONDecodeError
+from pathlib import Path
+import os
 from asyncio.tasks import sleep
+from typing import Any, Dict
 import requests
 import json
 from discord.ext import commands
@@ -6,14 +10,16 @@ from discord.ext.tasks import loop
 from urllib import parse
 from embeds import *
 
+ROOT_DIR = Path(__file__).parent
+
 bot = commands.Bot(command_prefix='!')
 #bot.remove_command("help")
-base_url = "https://api.www.root-me.org/"
-api_key = input("enter api key:")
+base_url = os.environ.get("ROOTME_API_URL", "https://api.www.root-me.org/")
+api_key = os.environ["ROOTME_API_KEY"]
 #api_key = ""
-filename = "data.json"
-rootmechannel = 782199856181149706  #root-me-news
-bot_token = ""
+filename = Path(os.environ.get("BOT_DATABASE_PATH", ROOT_DIR / "data.json"))
+rootmechannel = os.environ["BOT_CHANNEL_ID"]  #root-me-news
+bot_token = os.environ["BOT_TOKEN"]
 
 
 def getUserInfo(userID):
@@ -33,9 +39,11 @@ async def updateDB():
     await bot.wait_until_ready()
     """update the local data from the API and check for solves"""
     print("updating")
-    file = open(filename, "r")
-    users = json.load(file)
-    file.close()
+    try:
+        users: Dict[str, Any] = json.load(filename.open("r"))
+    except (FileNotFoundError, JSONDecodeError):
+        filename.write_text("{}")
+        users = dict()
 
     for user in users.values():
         new_user_data = getUserInfo(user["id_auteur"])
@@ -151,4 +159,4 @@ async def reset_database(context):
 
 
 updateDB.start()
-bot.run("NjQyMDUwNjA4MjQ0NzE5NjQ2.XcRSOQ.5BwvmAHHB3VYS4LEPW6V4QzjgjY")
+bot.run(bot_token)
