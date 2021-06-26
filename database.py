@@ -4,9 +4,12 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 import json
 from json.decoder import JSONDecodeError
+import logging
 from typing import Any, Iterable, Tuple, Union
 from model import User
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -17,26 +20,29 @@ class Database(UserDict[str, User]):
     def __post_init__(self):
         try:
             with self.filename.open("r") as f:
-                self.data = {
-                    uid: User(**data)
-                    for uid, data in json.load(f).values()
-                }
+                input_data = json.load(f)  # type: dict[str, dict[str, Any]]
+                assert isinstance(input_data, dict)
+            self.data = {uid: User(**data) for uid, data in input_data.items()}
         except (FileNotFoundError, JSONDecodeError):
             self.filename.write_text("{}")
             self.data = dict()
+        logger.debug("Database: initialized")
 
     def transaction(self) -> "TransactionContext":
         return TransactionContext(self)
 
     def set_user(self, user: User) -> None:
+        logger.debug("Database: set user %r", user.id_auteur)
         self.data[user.id_auteur] = user
         if self.autocommit:
             self.save()
 
     def get_user(self, user_id: str) -> Union[User, None]:
+        logger.debug("Database: get user %r", user_id)
         return self.data.get(user_id)
 
     def remove_user(self, user_id: str) -> Union[User, None]:
+        logger.debug("Databse: remove user %r", user_id)
         if user_id in self.data:
             old_user = self.data[user_id]
             del self.data[user_id]
@@ -52,11 +58,13 @@ class Database(UserDict[str, User]):
         return self.data.values()
 
     def save(self) -> None:
+        logger.info("Database: commit to disk (path: %s)", self.filename)
         data = {uid: user.dict() for uid, user in self.data.items()}
         with self.filename.open("w") as f:
             json.dump(data, f, default=str)
 
     def reset(self) -> None:
+        logger.info("Database: reset")
         self.data = {}
         self.save()
 

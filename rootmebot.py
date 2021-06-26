@@ -1,14 +1,18 @@
-from database import Database
-from model import ChallengeInfo, User
-from pathlib import Path
 import os
 from asyncio.tasks import sleep
+import logging
+from pathlib import Path
 from typing import Union
+from urllib import parse
+from discord.ext.commands.errors import UserInputError
+
 import requests
 from discord.ext import commands
 from discord.ext.tasks import loop
-from urllib import parse
+
+from database import Database
 from embeds import *
+from model import ChallengeInfo, User
 
 ROOT_DIR = Path(__file__).parent
 
@@ -21,6 +25,8 @@ bot_token = os.environ["BOT_TOKEN"]
 update_db_rate = int(os.environ.get("ROOTME_UPDATE_DB_RATE", 60))
 
 database = Database(filename, autocommit=True)
+
+logger = logging.getLogger(__name__)
 
 
 def get_user_info(userID: str) -> Union[User, None]:
@@ -37,8 +43,9 @@ def get_user_info(userID: str) -> Union[User, None]:
 
 @loop(seconds=update_db_rate)
 async def update_db():
-    await bot.wait_until_ready()
     """update the local data from the API and check for solves"""
+    logger.debug("update_db()")
+    await bot.wait_until_ready()
 
     with database.transaction():
         for user in database.iter_users():
@@ -67,18 +74,23 @@ async def update_db():
 @bot.command()
 async def add_user(context, user_id: str):
     """<user ID>"""
-    print(context)
+    logger.info("Adding user %r", user_id)
     try:
         if int(user_id) > 0:
             if (new_info := get_user_info(user_id)):
                 database.set_user(new_info)
+                logger.debug("Resolved id %r -> %r", user_id, new_info.nom)
                 await context.channel.send(
                     f"successfuly added user {new_info.nom}")
             else:
+                logger.warn("Couldn't get user info for id %r", user_id)
                 await context.channel.send(f"error getting this user's info")
         else:
+            logger.error("User ID must be a positive integer (got %r)",
+                         user_id)
             await context.channel.send(f"user ID must be a positive integer")
-    except ValueError:
+    except ValueError as ex:
+        logger.exception("Value error: %s", str(ex), exc_info=ex)
         await context.channel.send(f"user ID must be a positive integer")
 
 
@@ -86,21 +98,26 @@ async def add_user(context, user_id: str):
 async def find_user(context, username: str):
     """<user name>"""
     username = parse.quote(username, safe="")
+    logger.info("Find user %r", username)
     raw_data = requests.get(f"{base_url}auteurs?nom={username}",
                             cookies={"api_key": api_key})
     if (raw_data.status_code == 404):
+        logger.error("User %r not found", username)
         await context.channel.send("no match for this username")
     elif (raw_data.status_code == 401):
+        logger.error("Invalid API Key, got Unauthorized status")
         await context.channel.send(
             "api key is not valid. Please provide me with a correct api at launch"
         )
     elif (raw_data.status_code != 200):
+        logger.error("Got response status code %i", raw_data.status_code)
         await context.channel.send("unknown error")
     else:
-        data = raw_data.json()
-        usernameTuppleList = [(user.nom, user.id_auteur)
-                              for user in data[0].values()]
-        embed = makeFindEmbed(usernameTuppleList)
+        data = raw_data.json()  # type: ignore
+        matched_users = [(user['nom'], user['id_auteur'])
+                         for user in data[0].values()]
+        logger.debug("Found %d matching user profiles", len(matched_users))
+        embed = makeFindEmbed(matched_users)
         await context.channel.send(embed=embed)
 
 
@@ -108,17 +125,24 @@ async def find_user(context, username: str):
 async def remove_user(context, user_id: str):
     """<user ID>"""
     if (user := database.remove_user(user_id)):
-        await context.channel.send(f"Successfully removed user ${user.nom}")
+        logger.info("Removed user %r (ID: %s)", user.nom, user.id_auteur)
+        await context.channel.send(f"Successfully removed user {user.nom}")
     else:
+        logger.info("Remove user: ID %r does not exist", user_id)
         await context.channel.send("This user is not registered")
 
 
 @bot.command()
 async def scoreboard(context):
+    logger.debug("Show scoreboard")
     users = [(u.nom, u.score) for u in database.iter_users()]
     users.sort(key=lambda x: x[0])
-    embed = makeScoreBoardEmbed(users)
-    await context.channel.send(embed=embed)
+    if len(users) == 0:
+        await context.channel.send(
+            "The list of users is empty. Please add users first!")
+    else:
+        embed = makeScoreBoardEmbed(users)
+        await context.channel.send(embed=embed)
 
 
 #@bot.command()
@@ -130,9 +154,22 @@ async def scoreboard(context):
 
 @bot.command()
 async def reset_database(context):
+    logger.debug("Reset database")
     database.reset()
     await context.channel.send("database has been reset")
 
 
-update_db.start()
-bot.run(bot_token)
+if __name__ == "__main__":
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(
+        logging.Formatter(
+            'level={levelname} module={name!r} message={message!r}',
+            style='{'))
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(handler)
+
+    update_db.start()
+    logger.info("Starting bot")
+    bot.run(bot_token)
