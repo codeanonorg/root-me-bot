@@ -5,7 +5,6 @@ import os
 from asyncio.tasks import sleep
 from typing import Union
 import requests
-import json
 from discord.ext import commands
 from discord.ext.tasks import loop
 from urllib import parse
@@ -99,27 +98,19 @@ async def find_user(context, username: str):
         await context.channel.send("unknown error")
     else:
         data = raw_data.json()
-        usernameTuppleList = [(user['nom'], user['id_auteur'])
+        usernameTuppleList = [(user.nom, user.id_auteur)
                               for user in data[0].values()]
         embed = makeFindEmbed(usernameTuppleList)
         await context.channel.send(embed=embed)
 
 
 @bot.command()
-async def remove_user(context, arg1):
+async def remove_user(context, user_id: str):
     """<user ID>"""
-    file = open(filename, "r")
-    new_json = json.load(file)
-    file.close()
-    if arg1 in new_json:
-        await context.channel.send(
-            f"successfully removed user {new_json[arg1]['nom']}")
-        new_json.pop(arg1)
-        file = open(filename, "w")
-        json.dump(new_json, file, indent=4)
-        file.close()
+    if (user := database.remove_user(user_id)):
+        await context.channel.send(f"Successfully removed user ${user.nom}")
     else:
-        await context.channel.send("this user is not registered")
+        await context.channel.send("This user is not registered")
 
 
 @bot.command()

@@ -1,3 +1,4 @@
+from collections import UserDict
 from contextlib import ContextDecorator
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -9,10 +10,9 @@ from pathlib import Path
 
 
 @dataclass
-class Database:
+class Database(UserDict[str, User]):
     filename: Path
     autocommit: bool = field(default=False)
-    data: dict[str, User] = field(init=False)
 
     def __post_init__(self):
         try:
@@ -36,13 +36,14 @@ class Database:
     def get_user(self, user_id: str) -> Union[User, None]:
         return self.data.get(user_id)
 
-    def remove_user(self, user_id: str) -> bool:
+    def remove_user(self, user_id: str) -> Union[User, None]:
         if user_id in self.data:
+            old_user = self.data[user_id]
             del self.data[user_id]
             if self.autocommit:
                 self.save()
-            return True
-        return False
+            return old_user
+        return None
 
     def iter_ids(self) -> Iterable[str]:
         return self.data.keys()
