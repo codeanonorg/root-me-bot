@@ -5,7 +5,8 @@ from dataclasses import dataclass, field
 import json
 from json.decoder import JSONDecodeError
 import logging
-from typing import Any, Iterable, Tuple, Union
+from types import TracebackType
+from typing import Any, Iterable, Optional, Tuple, Type, Union
 from model import User
 from pathlib import Path
 
@@ -80,12 +81,20 @@ class TransactionContext(ContextDecorator):
         self._old_data = deepcopy(self.db.data)
 
     def __enter__(self):
+        logger.debug("Database:Transaction: Enter")
         self.db.autocommit = False
 
-    def __exit__(self, *exc: Tuple[Any]):
-        if len(exc) == 0:
+    def __exit__(self, exc_type: Optional[Type[Exception]],
+                 exc_value: Optional[Exception], traceback: TracebackType):
+        logger.debug("Database:Transaction: Exit")
+        if exc_type is None:
             self.db.save()
         else:
+            logger.error("Exiting on error, reverting old data",
+                         extra={
+                             "exception": exc_value,
+                             "traceback": traceback
+                         })
             self.db.data = self._old_data
         self.db.autocommit = self._old_autocommit
         return False
