@@ -67,7 +67,7 @@ async def update_db():
                     await channel.send(
                         embed=makeChallengeEmbed(challenge_info, new_user_data)
                     )
-            database.set_user(user)
+            database.set_user(new_user_data)
             await sleep(0.05)
 
 
