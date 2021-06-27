@@ -64,10 +64,13 @@ async def update_db():
                     if channel is None:
                         raise ValueError(
                             f"Channel ID {rootmechannel!r} does not exist")
-                    await channel.send(
-                        embed=makeChallengeEmbed(challenge_info, new_user_data)
-                    )
+                    logger.debug("NEW CHALLENGE SOLVED")
+                    #await channel.send(
+                    #    embed=makeChallengeEmbed(challenge_info, new_user_data)
+                    #)
+            logger.info("USERDATAINFO : %s", new_user_data, exc_info=1)
             database.set_user(new_user_data)
+            logger.info("DATABASEINFO : %s", database.get_user(new_user_data.id_auteur), exc_info=1)
             await sleep(0.05)
 
 
