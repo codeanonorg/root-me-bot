@@ -136,7 +136,7 @@ async def remove_user(context, user_id: str):
 async def scoreboard(context):
     logger.debug("Show scoreboard")
     users = [(u.nom, u.score) for u in database.iter_users()]
-    users.sort(key=lambda x: x[1], reverse = True)
+    users.sort(key=lambda x: x[1], reverse = False)
     if len(users) == 0:
         await context.channel.send(
             "The list of users is empty. Please add users first!")
